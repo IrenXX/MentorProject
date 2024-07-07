@@ -11,15 +11,19 @@ import ru.example.demo.dto.UserRequestUpdateDto;
 import ru.example.demo.dto.UserResponseDto;
 import ru.example.demo.entity.User;
 import ru.example.demo.exceptions.EntityNotFoundException;
+import ru.example.demo.exceptions.UserNotCreatedException;
 import ru.example.demo.repository.UserRepository;
 
+import java.util.Collections;
+import java.util.List;
 import java.util.Optional;
+import java.util.stream.Collectors;
 
 @Service
 @Slf4j
 @Data
+@Transactional(readOnly = true)
 public class UserServiceImpl implements UserService {
-
     private final UserRepository userRepository;
 
     @Autowired
@@ -28,21 +32,34 @@ public class UserServiceImpl implements UserService {
     }
 
     @Override
-    @Transactional(readOnly = true)
+    public List<UserResponseDto> findAll() {
+        return userRepository.findAll().stream().map(this::fromEntity).collect(Collectors.toList());
+    }
+
+    @Override
+
     public UserResponseDto getUserById(Long id) {
         Optional<User> optionalTest = userRepository.findById(id);
-        if (optionalTest.isEmpty()) {
-            log.error("Ошибка поиска id='{}'. В базе нет такой записи", id);
-            throw new EntityNotFoundException("Запись не найдена с id=" + id);
-        }
-
-        User user = optionalTest.get();
-
         User user1 = optionalTest.orElseThrow(
-                () -> new EntityNotFoundException("Запись не найдена с id=" + id)
+                () -> {
+                    log.error("Ошибка поиска id='{}'. В базе нет такой записи", id);
+                    throw new EntityNotFoundException("Recorder with id= " + id + " not found");
+                }
         );
-
         return fromEntity(user1);
+    }
+
+    @Override
+    @Transactional
+    public void deleteUser(Long id) {
+        Optional<User> optionalTest = userRepository.findById(id);
+        optionalTest.orElseThrow(
+                () -> {
+                    log.error("Ошибка поиска id='{}'. В базе нет такой записи", id);
+                    throw new EntityNotFoundException("Recorder with id= " + id + " not found");
+                }
+        );
+        userRepository.deleteById(id);
     }
 
     @Override
@@ -50,8 +67,8 @@ public class UserServiceImpl implements UserService {
     public Long createUser(UserRequestDto userRequestDto) {
         String name = userRequestDto.getName();
         String surname = userRequestDto.getSurname();
-        if (StringUtils.isBlank(name) && StringUtils.isBlank(surname)) {
-            throw new RuntimeException("Имя и фамилия должны быть заполнены");
+        if (StringUtils.isBlank(name) || StringUtils.isBlank(surname)) {
+            throw new UserNotCreatedException("Имя и фамилия должны быть заполнены");
         }
         User entity = toEntity(userRequestDto);
         User save = userRepository.save(entity);
@@ -60,21 +77,15 @@ public class UserServiceImpl implements UserService {
 
     @Override
     @Transactional
-    public void deleteUser(Long id) {
-        //всякие проверки
-        userRepository.deleteById(id);
-    }
-
-    @Override
-    @Transactional
     public UserResponseDto updateUser(UserRequestUpdateDto updateDto) {
         Long id = updateDto.getId();
-        //всякие проверки
         Optional<User> optionalId = userRepository.findById(id);
         User user = optionalId.orElseThrow(
-                () -> new EntityNotFoundException("Запись не найдена с id=" + id)
+                () -> {
+                    log.error("Ошибка поиска id='{}'. В базе нет такой записи", id);
+                    throw new EntityNotFoundException("Recorder with id= " + id + " not found");
+                }
         );
-
         user.setSurname(updateDto.getSurname());
         user.setName(updateDto.getName());
         User savedUser = userRepository.save(user);
